@@ -41,6 +41,8 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 #define turnerinput 8 //relays
 #define heaterRelay A0 //heater relay
 #define lightrelay 12
+#define ON  HIGH
+#define OFF LOW
 
 DHT sensor1(DHT1, DHTTYPE);
 const byte buttonEdit = 5;
@@ -116,7 +118,7 @@ int set_minute = 1; //used to set rtc
 int set_hour = 1; //used to set rtc
 int set_day = 1; //used to set rtc
 int set_month = 1; //used to set rtc
-long set_year = 2017; //used to set rtc
+long set_year = 2018; //used to set rtc
 int tunerDisable = 0;
 int clock_update = 0; //used to set rtc
 byte reboot = 1;
@@ -203,12 +205,12 @@ void setup() {
   pinMode (buttonEnter, INPUT_PULLUP);
   pinMode (turnerinput, INPUT_PULLUP);
   pinMode (overrun, INPUT_PULLUP);
-  pinMode (humidityRelay, OUTPUT), HIGH;
-  pinMode (alarmrelay, OUTPUT), HIGH;
-  pinMode (turnerrelay1, OUTPUT), HIGH;
-  pinMode (turnerrelay2, OUTPUT), HIGH;
-  pinMode (heaterRelay, OUTPUT), HIGH;
-  pinMode (lightrelay, OUTPUT), HIGH;
+  pinMode (humidityRelay, OUTPUT);
+  pinMode (alarmrelay, OUTPUT);
+  pinMode (turnerrelay1, OUTPUT);
+  pinMode (turnerrelay2, OUTPUT);
+  pinMode (heaterRelay, OUTPUT);
+  pinMode (lightrelay, OUTPUT);
   clock.begin();
   sensor1.begin();
   lcd.clear();
@@ -695,7 +697,7 @@ void screenCall() {
           while (escape == 0) {
             checkeditbutton();
             buttons(8);
-            set_month = constrain(set_day, 1, 12);
+            set_month = constrain(set_month, 1, 12);
             lcd.setCursor(0, 0);
             lcd.print (F("set month"));
             lcd.setCursor(0, 1);
@@ -715,7 +717,7 @@ void screenCall() {
           while (escape == 0) {
             checkeditbutton();
             buttons(9);
-            set_year = constrain(set_day, 2017, 2030);
+            set_year = constrain(set_year, 2018, 2030);
             //set year here
             lcd.setCursor(0, 0);
             lcd.print (F("set year"));
@@ -1243,15 +1245,15 @@ void screenCall() {
             checkeditbutton();
             buttons(22);
             if (minusButton == 0) {
-              digitalWrite (turnerrelay1, LOW);
+              digitalWrite (turnerrelay1, ON);
             } else {
-              digitalWrite (turnerrelay1, HIGH);
+              digitalWrite (turnerrelay1, OFF);
             }
 
             if (plusButton == 0) {
-              digitalWrite (turnerrelay2, LOW);
+              digitalWrite (turnerrelay2, ON);
             } else {
-              digitalWrite (turnerrelay2, HIGH);
+              digitalWrite (turnerrelay2, OFF);
             }
 
             lcd.setCursor(4, 0);
@@ -1688,20 +1690,20 @@ void humidityFan() {
   //humidity fan code
   if (badsensor == 0) { //good reading
     if (adj_humidity >= humidity_setpoint) {
-      digitalWrite (humidityRelay, HIGH);//off
+      digitalWrite (humidityRelay, OFF);//off
       humidityfandisplay = 0;
     }
     else if ( adj_humidity <= humidity_setpoint - humiditySwing ) {
       if (editMode != 0) {
-        digitalWrite (humidityRelay, HIGH);//in while loop disable
+        digitalWrite (humidityRelay, OFF);//in while loop disable
       } else {
-        digitalWrite (humidityRelay, LOW);//low is on
+        digitalWrite (humidityRelay, ON);//low is on
         humidityfandisplay = 1;
       }
     }
 
   } else { //bad reading go safe
-    digitalWrite (humidityRelay, HIGH);//off
+    digitalWrite (humidityRelay, OFF);//off
     humidityfandisplay = 0;
   }
 }
@@ -1709,20 +1711,20 @@ void humidityFan() {
 void heatercontrols() {
   if (badsensor == 0) { //good reading
     if (adj_temp >= temp_setpoint) {
-      digitalWrite (heaterRelay, HIGH);//off
+      digitalWrite (heaterRelay, OFF);//off
       heaterdisplay = 0;
     }
     else if ( adj_temp <= temp_setpoint - tempSwing ) {
       if (editMode != 0) {
-        digitalWrite (heaterRelay, HIGH);//in while loop disable
+        digitalWrite (heaterRelay, OFF);//in while loop disable
       } else {
-        digitalWrite (heaterRelay, LOW);//low is on
+        digitalWrite (heaterRelay, ON);//low is on
         heaterdisplay = 1;
       }
     }
 
   } else { //bad reading go safe
-    digitalWrite (heaterRelay, HIGH);//off
+    digitalWrite (heaterRelay, OFF);//off
     heaterdisplay = 0;
   }
 }
@@ -1897,10 +1899,10 @@ void alarmcheck () {
   }
 
   if ((alarm_active != 0) && (soundalarm == 1)) {
-    digitalWrite (alarmrelay, LOW);
+    digitalWrite (alarmrelay, ON);
     tone(11, 1000);
   } else {
-    digitalWrite (alarmrelay, HIGH);
+    digitalWrite (alarmrelay, OFF);
     soundalarm = 0;
     noTone(11);
   }
@@ -2008,7 +2010,7 @@ void turnercontrols() {
     switch (turnerType) {
       case 1:
         //always running
-        digitalWrite (turnerrelay1, LOW);
+        digitalWrite (turnerrelay1, ON);
         display_stat_turn = 3;
         break;
       case 2://same as case 3
@@ -2019,11 +2021,11 @@ void turnercontrols() {
         turn_timer = turn_timer / 60;
         if ((secondTurnercounter >= timeBetweenTurnsSeconds) || (testTurner == 1)) { //time to turn
           if (turnerRunCounter <= TimeTurnerTurns) {//turn for this time
-            digitalWrite (turnerrelay1, LOW);
+            digitalWrite (turnerrelay1, ON);
             display_stat_turn = 3;
           } else {//done turning
             if ((turnerstop == 0) || (turnerType == 2)) {
-              digitalWrite (turnerrelay1, HIGH);//high is off
+              digitalWrite (turnerrelay1, OFF);//high is off
               secondTurnercounter = 0;//reset time to turn
               testTurner = 0;
             }
@@ -2051,12 +2053,12 @@ void turnercontrols() {
             display_stat_turn = 2;
           }
           if ((tilt == 1) && ((turnerstop == 1) || (onetime == 1))) {
-            digitalWrite (turnerrelay1, LOW);
-            digitalWrite (turnerrelay2, HIGH);
+            digitalWrite (turnerrelay1, ON);
+            digitalWrite (turnerrelay2, OFF);
             display_stat_turn = 3;
           } if ((tilt == 0) && ((turnerstop == 1) || (onetime == 1))) {
-            digitalWrite (turnerrelay1, HIGH);
-            digitalWrite (turnerrelay2, LOW);
+            digitalWrite (turnerrelay1, OFF);
+            digitalWrite (turnerrelay2, ON);
             display_stat_turn = 3;
           }
           if (prevturnerstop != turnerstop) {
@@ -2064,15 +2066,15 @@ void turnercontrols() {
             prevturnerstop = turnerstop;
           }
           if ((turnerstop == 0) && (onetime == 0)) {
-            digitalWrite (turnerrelay1, HIGH);
-            digitalWrite (turnerrelay2, HIGH);
+            digitalWrite (turnerrelay1, OFF);
+            digitalWrite (turnerrelay2, OFF);
             display_stat_turn = 2;
 
           }
 
         } else {     //if (turnerEstop == 1) {
-          digitalWrite (turnerrelay1, HIGH);
-          digitalWrite (turnerrelay2, HIGH);
+          digitalWrite (turnerrelay1, OFF);
+          digitalWrite (turnerrelay2, OFF);
           alarm_active = 8;
         }
         break;
@@ -2083,8 +2085,8 @@ void turnercontrols() {
     }
   } else {
     display_stat_turn = 1;
-    digitalWrite (turnerrelay1, HIGH);
-    digitalWrite (turnerrelay2, HIGH);
+    digitalWrite (turnerrelay1, OFF);
+    digitalWrite (turnerrelay2, OFF);
   }
 }
 
