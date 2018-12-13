@@ -1793,16 +1793,15 @@ void showclock() {
   }
   lcd.print(dt.second, DEC);
   lcd.print(" ");
-  if (dt.month < 10) {
-    lcd.print("0");
-  }
-  lcd.print(dt.month, DEC);
-  lcd.print("/");
-  /* Edit requitred : Jithin */
   if (dt.day < 10) {
     lcd.print("0");
   }
   lcd.print(dt.day, DEC);
+  lcd.print("/");
+  if (dt.month < 10) {
+    lcd.print("0");
+  }
+  lcd.print(dt.month, DEC);
   lcd.print("/");
   lcd.print(dt.year, DEC);
 }
