@@ -3,7 +3,7 @@
 *   
 *   File:   Egg_Incubator.ino
 *   Author:  Jithin Krishnan.K
-*       Rev. 1.0.0 : 10/12/2018 :  10:55 PM
+*       Rev. 1.0.1 : 23/12/2018 :  9:51 PM
 * 
 * This program is free software: you can redistribute it and/or modify
 *   it under the terms of the GNU General Public License as published by
@@ -28,28 +28,33 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <Adafruit_Sensor.h>
+#include <avr/wdt.h>
 #include "DHT.h"
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
+void(* resetFunc) (void) = 0;
+#define doggieTickle() resetTime = millis();
 #define DHT1 2
-#define DHTTYPE DHT11   // DHT 22  (AM2302)
-#define humidityRelay 10 //relays
-#define alarmrelay A3 //relays
-#define turnerrelay1 A1 //relays
-#define turnerrelay2 A2 //relays
+#define DHTTYPE DHT22   // DHT 22  (AM2302)
+#define humidityRelay 10 // Humidifier Relay
+#define alarmrelay A3 // Audio Alarm Relay
+#define turnerrelay1 A1 // Egg Turner Relay
+#define turnerrelay2 A2 //relays - Not used
 #define overrun 9
-#define turnerinput 8 //relays
-#define heaterRelay A0 //heater relay
-#define lightrelay 12
+#define turnerinput 8 // Not Used
+#define heaterRelay A0 // Heater Relay
+#define lightrelay 12 // Light 
 #define ON  HIGH
 #define OFF LOW
+#define TIMEOUTPERIOD 8000 
 
 DHT sensor1(DHT1, DHTTYPE);
-const byte buttonEdit = 5;
-const byte buttonPlus = 4;
-const byte buttonMinus = 7;
-const byte buttonEnter = 6;//make into lights
-
+const byte buttonEdit = 6;
+const byte buttonPlus = 7;
+const byte buttonMinus = 4;
+const byte buttonEnter = 5; // Light ON/OFF
+unsigned long resetTime = 0;
+char toggle = 0;
 
 char* menu1[8] = {"set temp/humidity", "set time/date", "set turner",
                   "set hatch date", "alarm points", "hardware setup", "factory reset", "return"
@@ -114,11 +119,11 @@ int display_stat_turn = 1;
 int t1_hatch_days = 15;
 int time_to_turn_mins;
 int time_to_turn_hr;
-int set_minute = 1; //used to set rtc
-int set_hour = 1; //used to set rtc
-int set_day = 1; //used to set rtc
-int set_month = 1; //used to set rtc
-long set_year = 2018; //used to set rtc
+int set_minute; //used to set rtc
+int set_hour; //used to set rtc
+int set_day; //used to set rtc
+int set_month; //used to set rtc
+long set_year; //used to set rtc
 int tunerDisable = 0;
 int clock_update = 0; //used to set rtc
 byte reboot = 1;
@@ -179,6 +184,7 @@ byte arrow_Char[8] = {B00000, B00000, B10000, B10000, B10111, B10011, B10101, B0
 byte pointer[8] = {B10000, B01000, B00100, B00010, B00010, B00100, B01000, B10000};
 byte showC[8] = {B11000, B11000, B00000, B00111, B00100, B00100, B00100, B00111};
 byte showF[8] = {B11000, B11000, B00000, B00111, B00100, B00111, B00100, B00100};
+uint8_t deg_sym[8]  = {B00110, B01001, B01001, B00110, B00000, B00000, B00000, B00000};
 
 //DS1307 clock;
 DS3231 clock;
@@ -187,10 +193,11 @@ sensor_t sensor;
 
 void setup() {
   // put your setup code here, to run once:
-  // Serial.begin(9600);
-  //lcd.begin(20, 4);
+  Serial.begin(115200);
   lcd.init();
   lcd.backlight();
+  WatchdogSetup();
+  InitInterrupt();
   lcd.createChar(1, temp_char);
   lcd.createChar(2, hum_char);
   lcd.createChar(3, bell_Char);
@@ -198,7 +205,8 @@ void setup() {
   lcd.createChar(5, pointer);
   lcd.createChar(6, showF);
   lcd.createChar(7, showC);
-
+  lcd.createChar(8, deg_sym);
+  
   pinMode (buttonEdit, INPUT_PULLUP);
   pinMode (buttonPlus, INPUT_PULLUP);
   pinMode (buttonMinus, INPUT_PULLUP);
@@ -211,10 +219,12 @@ void setup() {
   pinMode (turnerrelay2, OUTPUT);
   pinMode (heaterRelay, OUTPUT);
   pinMode (lightrelay, OUTPUT);
+  pinMode (13, OUTPUT);
   clock.begin();
   sensor1.begin();
   lcd.clear();
-
+  LoadRTCTime();
+  
   EEPROM.get (0, temp_setpoint); //float
   turnerAlarm = EEPROM.read (4); //int
   EEPROM.get (8,  highTempSetPoint ); //float
@@ -244,6 +254,7 @@ void setup() {
 
 //...................................................................................loop
 void loop() {
+  doggieTickle();
   clockset();
   memoryUpdater();
   getTemp();
@@ -264,11 +275,12 @@ void loop() {
 void testMenu(int x, int y, int z ) {
   int a;
    lcd.setCursor(6, 0);
-  // lcd.print(x);//used for testing
-  //lcd.setCursor(4, 0);//used for testing
-  // lcd.print(y);//used for testing
-  // lcd.setCursor(8, 0);//used for testing
-  // lcd.print(z);//used for testing
+   Serial.print("menuNumber = ");
+   Serial.println(x);//used for testing
+   Serial.print("screenmax = ");
+   Serial.println(y);//used for testing
+   Serial.print("menuLevel = ");
+   Serial.println(z);//used for testing
   lcd.print (F("menu"));
   int b;
   if (x == 1) {
@@ -452,11 +464,11 @@ void screenCall() {
           while (escape == 0) {
             checkeditbutton();
             lcd.setCursor(1, 0);
-            lcd.print(F("senor"));
+            lcd.print(F("Sensor"));
             lcd.setCursor(11, 0);
-            lcd.print(F("adjusted"));
+            lcd.print(F("Adjusted"));
             lcd.setCursor(0, 1);
-            lcd.print("s");
+            //lcd.print("s");
             addSpace(1);
             lcd.write(1);
             lcd.print (temp, 1);
@@ -468,7 +480,7 @@ void screenCall() {
             lcd.print (adj_temp, 1);
             addSign();
             lcd.setCursor(0, 2);
-            lcd.print("s");
+            //lcd.print("s");
             addSpace(1);
             lcd.write(2);
             lcd.print (humidity, 1);
@@ -1300,7 +1312,8 @@ void buttons(byte type) {
 
   plusButton = digitalRead(buttonPlus);
   minusButton = digitalRead(buttonMinus);
-
+  doggieTickle();
+  
   if ((plusButton == 0) && (prevplusButton == 1)) {
     lcd.clear();
     switch (type) {
@@ -1357,6 +1370,7 @@ void buttons(byte type) {
         break;
       case 18:
         TimeBetweenTurns++;
+        TimeBetweenTurns = constrain(TimeBetweenTurns, 1, 12);
         break;
       case 19:
         TimeTurnerTurns++;
@@ -1460,6 +1474,7 @@ void buttons(byte type) {
         break;
       case 18:
         TimeBetweenTurns--;
+        TimeBetweenTurns = constrain(TimeBetweenTurns, 1, 12);
         break;
       case 19:
         TimeTurnerTurns--;
@@ -1518,16 +1533,14 @@ void callHomeScreen() {
   showclock();
   lcd.setCursor(0, 1);
   lcd.write(1);
-  lcd.print(F(":"));
-  addSpace(1);
-  if (adj_temp, 1 < 100) {
+  lcd.setCursor(2, 1);
+  if (adj_temp < 100) {
     addSpace(1); //stop screen moving due to extra digit
   }
   lcd.print (adj_temp, 1);
-  addSign();
-  addSpace(1);
+  addSign(); // degree symbol
+  lcd.setCursor(10, 1);
   lcd.write(2);
-  lcd.print(F(":"));
   addSpace(1);
   lcd.print (adj_humidity, 1);
 
@@ -1733,7 +1746,8 @@ void  checkeditbutton() {
 
   lightButton = digitalRead(buttonEnter);
   editButton = digitalRead(buttonEdit);
-
+  doggieTickle();
+  
   //after 2 mins kick out of menu and do not save changes
   unsigned long currentMillis5 = millis();
   if (currentMillis5 - previousMillis5 > 120000L) {
@@ -1899,22 +1913,18 @@ void alarmcheck () {
 
   if ((alarm_active != 0) && (soundalarm == 1)) {
     digitalWrite (alarmrelay, ON);
-    tone(11, 1000);
+    //tone(11, 1000);
   } else {
     digitalWrite (alarmrelay, OFF);
     soundalarm = 0;
-    noTone(11);
+    //noTone(11);
   }
 }
 
 void clockset() {
   if (clock_update == 1) {
-    //clock.fillByYMD(set_year, set_month, set_day); //Jan 19,2013
-    //clock.fillByHMS(set_hour, set_minute, 30); //15:28 30"
-    //clock.fillDayOfWeek(SAT);//Saturday
-    clock.setDateTime(set_year, set_month, set_day, set_hour, set_minute, 30);
-    //clock.setTime();//write time to the RTC chip
-    clock_update = 0;
+      clock.setDateTime(set_year, set_month, set_day, set_hour, set_minute, 0);
+      clock_update = 0;
   }
 }
 
@@ -2114,10 +2124,12 @@ void timers() {
 
 void addSign() {
   if (tempinF == 0) {
-    lcd.write(6);//6 is F sign
+    lcd.write(8);//6 is F sign
+    lcd.print('F');
   }
   else {
-    lcd.write(7);//7 is c sign
+    lcd.write(8);//7 is c sign
+    lcd.print('C');
   }
 }
 
@@ -2127,6 +2139,61 @@ void addSpace(int number) {
   }
 }
 
+void WatchdogSetup()
+{
+  cli();  // disable all interrupts
+  wdt_reset(); // reset the WDT timer
+  MCUSR &= ~(1<<WDRF);  // because the data sheet said to
+  /*
+  WDTCSR configuration:
+  WDIE = 1 :Interrupt Enable
+  WDE = 1  :Reset Enable - I won't be using this on the 2560
+  WDP3 = 0 :For 1000ms Time-out
+  WDP2 = 1 :bit pattern is 
+  WDP1 = 1 :0110  change this for a different
+  WDP0 = 0 :timeout period.
+  */
+  // Enter Watchdog Configuration mode:
+  WDTCSR = (1<<WDCE) | (1<<WDE);
+  // Set Watchdog settings: interrupte enable, 0110 for timer
+  WDTCSR = (1<<WDIE) | (0<<WDP3) | (1<<WDP2) | (1<<WDP1) | (0<<WDP0);
+  sei();
+}
+
+ISR(WDT_vect) // Watchdog timer interrupt.
+{ 
+  if(millis() - resetTime > TIMEOUTPERIOD){
+      resetFunc();     // This will call location zero and cause a reboot.
+  } 
+}
+
+void InitInterrupt()
+{
+  cli();
+  TCCR1A = 0;  
+  TCCR1B = 0;  
+  TCNT1  = 0;
+  OCR1A = 15624;// = (16*10^6) / (1*1024) - 1 (must be <65536)
+  TCCR1B |= (1 << WGM12);
+  TCCR1B |= (1 << CS12) | (1 << CS10);  
+  TIMSK1 |= (1 << OCIE1A);
+  sei();
+}
+
+ISR(TIMER1_COMPA_vect) {
+  
+   digitalWrite(13, toggle);
+   toggle = !toggle;
+}
+
+void LoadRTCTime() {
+    dt = clock.getDateTime();
+    set_minute = dt.minute;
+    set_hour = dt.hour;
+    set_day = dt.day;
+    set_month = dt.month;
+    set_year = dt.year;
+}
 
 //void showprint() {
 // static unsigned long prevMillis1;
